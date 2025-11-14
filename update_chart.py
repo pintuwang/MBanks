@@ -30,7 +30,7 @@ from urllib.request import urlopen
 BASE_DATE = date(2024, 7, 1)
 SINGAPORE_TZ = timezone(timedelta(hours=8))
 PAGE_TITLE = "Top 10 Malaysian Banks Performance with base 1 Jul 2024"
-OUTPUT_HTML = Path("top_10_malaysian_banks.html")
+OUTPUT_HTML = Path("index.html")
 
 
 @dataclass(frozen=True)
@@ -87,7 +87,8 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help=(
             "Optional directory to read previously mirrored CSV files from if a "
-            "download fails. Defaults to --write-sample-data when that flag is set."
+            "download fails. Fallbacks are opt-in so automation jobs fail instead "
+            "of silently reusing stale data."
         ),
     )
     return parser.parse_args()
@@ -303,8 +304,12 @@ def main() -> None:
     tickers = [bank.ticker for bank in BANKS]
     ticker_to_name = {bank.ticker: bank.name for bank in BANKS}
 
-    fallback_dir = args.fallback_sample_data or args.write_sample_data
-    prices = load_prices(tickers, args.sample_data, args.write_sample_data, fallback_dir)
+    prices = load_prices(
+        tickers,
+        args.sample_data,
+        args.write_sample_data,
+        args.fallback_sample_data,
+    )
     relative = compute_relative(prices)
     chart_json = build_chart_json(relative, ticker_to_name)
     html = render_html(chart_json, datetime.now(timezone.utc))
