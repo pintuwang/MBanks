@@ -56,8 +56,11 @@ python update_chart.py --write-sample-data sample_data
 which refreshes the Chart.js dashboard and replaces the CSV fixtures with the
 latest Yahoo Finance data. When the run detects changed files, it commits and
 pushes them back to the default branch using the repository’s built-in
-`GITHUB_TOKEN`. Trigger the workflow manually via the “Run workflow” button if
-you need an ad-hoc update outside the scheduled time window.
+`GITHUB_TOKEN`. Ensure the workflow (or the repository-level setting) grants the
+token **write** access to contents—GitHub defaults to read-only tokens, which
+would cause `git push` to return HTTP 403 even though the commit step succeeds.
+Trigger the workflow manually via the “Run workflow” button if you need an
+ad-hoc update outside the scheduled time window.
 
 
 ## Committing everything (including `sample_data/`) to GitHub
