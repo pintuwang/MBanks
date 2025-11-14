@@ -31,7 +31,6 @@ BASE_DATE = date(2024, 7, 1)
 SINGAPORE_TZ = timezone(timedelta(hours=8))
 PAGE_TITLE = "Top 10 Malaysian Banks Performance with base 1 Jul 2024"
 OUTPUT_HTML = Path("index.html")
-OUTPUT_DATA = Path("chart-data.json")
 
 
 @dataclass(frozen=True)
@@ -84,6 +83,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=default_data,
         help=f"JSON file to write chart data to (default: {default_data}).",
+    )
+    parser.add_argument(
+        "--data-output",
+        type=Path,
+        default=OUTPUT_DATA,
+        help=f"JSON file to write chart data to (default: {OUTPUT_DATA}).",
     )
     parser.add_argument(
         "--write-sample-data",
