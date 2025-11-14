@@ -30,7 +30,7 @@ from urllib.request import urlopen
 BASE_DATE = date(2024, 7, 1)
 SINGAPORE_TZ = timezone(timedelta(hours=8))
 PAGE_TITLE = "Top 10 Malaysian Banks Performance with base 1 Jul 2024"
-OUTPUT_HTML = Path("top_10_malaysian_banks.html")
+OUTPUT_HTML = Path("index.html")
 
 
 @dataclass(frozen=True)
