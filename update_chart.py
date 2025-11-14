@@ -21,7 +21,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone, timedelta
 from pathlib import Path
-from typing import Dict, List, Mapping, Sequence, Set, Tuple
+from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -75,6 +75,12 @@ def parse_args() -> argparse.Namespace:
         help=f"HTML file to write (default: {OUTPUT_HTML}).",
     )
     parser.add_argument(
+        "--data-output",
+        type=Path,
+        default=OUTPUT_DATA,
+        help=f"JSON file to write chart data to (default: {OUTPUT_DATA}).",
+    )
+    parser.add_argument(
         "--write-sample-data",
         type=Path,
         help=(
@@ -87,7 +93,8 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help=(
             "Optional directory to read previously mirrored CSV files from if a "
-            "download fails. Defaults to --write-sample-data when that flag is set."
+            "download fails. Fallbacks are opt-in so automation jobs fail instead "
+            "of silently reusing stale data."
         ),
     )
     return parser.parse_args()
@@ -211,7 +218,11 @@ def compute_relative(prices: Mapping[str, "OrderedDict[date, float]"]) -> Mappin
     return relative
 
 
-def build_chart_json(relative_prices: Mapping[str, List[Tuple[date, float]]], ticker_to_name: Mapping[str, str]) -> str:
+def build_chart_payload(
+    relative_prices: Mapping[str, List[Tuple[date, float]]],
+    ticker_to_name: Mapping[str, str],
+    updated_at: datetime,
+) -> Mapping[str, Any]:
     datasets = []
     palette = [
         "#1f77b4",
@@ -240,12 +251,13 @@ def build_chart_json(relative_prices: Mapping[str, List[Tuple[date, float]]], ti
     payload = {
         "datasets": datasets,
         "yTitle": "Relative Price (1 Jul 2024 = 1.0)",
+        "updatedAt": updated_at.replace(microsecond=0).isoformat(),
+        "updatedAtLabel": updated_at.strftime("%d %b %Y %H:%M %Z"),
     }
-    return json.dumps(payload, indent=2)
+    return payload
 
 
-def render_html(chart_json: str, updated_at: datetime) -> str:
-    timestamp = updated_at.strftime("%d %b %Y %H:%M %Z")
+def render_html(data_filename: str) -> str:
     return f"""<!DOCTYPE html>
 <html lang=\"en\">
 <head>
@@ -267,29 +279,49 @@ def render_html(chart_json: str, updated_at: datetime) -> str:
 <body>
   <div class=\"container\">
     <h1>{PAGE_TITLE}</h1>
-    <p class=\"meta\">Last updated: {timestamp}</p>
+    <p class=\"meta\">Last updated: <span id=\"updatedAt\">Loading latest data…</span></p>
     <canvas id=\"banksChart\"></canvas>
   </div>
   <script>
-    const chartData = {chart_json};
-    const ctx = document.getElementById('banksChart').getContext('2d');
-    new Chart(ctx, {{
-      type: 'line',
-      data: {{ datasets: chartData.datasets }},
-      options: {{
-        responsive: true,
-        interaction: {{ mode: 'nearest', axis: 'x', intersect: false }},
-        stacked: false,
-        scales: {{
-          x: {{ type: 'time', time: {{ unit: 'month' }}, title: {{ display: true, text: 'Date' }} }},
-          y: {{ title: {{ display: true, text: chartData.yTitle }}, ticks: {{ callback: (value) => value.toFixed(2) }} }}
-        }},
-        plugins: {{ legend: {{ position: 'bottom' }} }}
+    async function initChart() {{
+      const meta = document.getElementById('updatedAt');
+      try {{
+        const response = await fetch('{data_filename}', {{ cache: 'no-cache' }});
+        if (!response.ok) {{
+          throw new Error(`Failed to fetch chart data: ${{response.status}}`);
+        }}
+        const chartData = await response.json();
+        meta.textContent = chartData.updatedAtLabel || chartData.updatedAt || 'Unknown';
+        const ctx = document.getElementById('banksChart').getContext('2d');
+        new Chart(ctx, {{
+          type: 'line',
+          data: {{ datasets: chartData.datasets }},
+          options: {{
+            responsive: true,
+            interaction: {{ mode: 'nearest', axis: 'x', intersect: false }},
+            stacked: false,
+            scales: {{
+              x: {{ type: 'time', time: {{ unit: 'month' }}, title: {{ display: true, text: 'Date' }} }},
+              y: {{
+                title: {{ display: true, text: chartData.yTitle || 'Relative Price' }},
+                ticks: {{ callback: (value) => (typeof value === 'number' ? value.toFixed(2) : value) }}
+              }}
+            }},
+            plugins: {{ legend: {{ position: 'bottom' }} }}
+          }}
+        }});
+      }} catch (error) {{
+        meta.textContent = 'Failed to load data';
+        console.error(error);
       }}
-    }});
+    }}
+    initChart();
   </script>
 </body>
 </html>"""
+
+def save_json(content: Mapping[str, Any], path: Path) -> None:
+    path.write_text(json.dumps(content, indent=2), encoding="utf-8")
 
 
 def save_html(content: str, path: Path) -> None:
@@ -303,14 +335,21 @@ def main() -> None:
     tickers = [bank.ticker for bank in BANKS]
     ticker_to_name = {bank.ticker: bank.name for bank in BANKS}
 
-    fallback_dir = args.fallback_sample_data or args.write_sample_data
-    prices = load_prices(tickers, args.sample_data, args.write_sample_data, fallback_dir)
+    prices = load_prices(
+        tickers,
+        args.sample_data,
+        args.write_sample_data,
+        args.fallback_sample_data,
+    )
     relative = compute_relative(prices)
-    chart_json = build_chart_json(relative, ticker_to_name)
-    html = render_html(chart_json, datetime.now(timezone.utc))
+    updated_at = datetime.now(timezone.utc)
+    chart_payload = build_chart_payload(relative, ticker_to_name, updated_at)
+    save_json(chart_payload, args.data_output)
+    html = render_html(args.data_output.name)
     save_html(html, args.output)
 
-    print(f"Chart updated -> {args.output}")
+    print(f"Chart data -> {args.data_output}")
+    print(f"HTML shell -> {args.output}")
 
 
 if __name__ == "__main__":
