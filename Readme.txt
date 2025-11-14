@@ -30,19 +30,20 @@ Use the optional `--force` flag if you need to regenerate the file outside the
 scheduled window for testing. When running in an offline environment, pass
 `--sample-data sample_data/` to use the bundled synthetic CSV files instead of
 downloading live quotes. The sample set now mirrors every Bursa Malaysia trading
-day from 1 July 2024 through 20 May 2025 (232 sessions), so the generated
+day from 1 July 2024 through 14 Nov 2025 (300+ sessions), so the generated
 relative-price chart preserves the more-than-200 data points per bank that the
-production job accumulates.
+production job accumulates. The HTML wrapper no longer embeds the data directly,
+so once `chart-data.json` is refreshed, the hosted chart automatically reflects
+the latest run without having to merge large inline arrays.
 
 If you run the script with live network access, add
 `--write-sample-data sample_data/` so the freshly downloaded Yahoo Finance CSV
 files are mirrored back into the repository. This keeps the offline fixtures in
 sync with the latest market sessions without any extra scripting. Should Yahoo
-Finance temporarily reject requests, the script now falls back to any cached CSV
-files in that mirror directory (or in a separate location passed via
-`--fallback-sample-data sample_data/`). A warning is printed so you know the
-prices were not refreshed, but the HTML chart is still regenerated so scheduled
-pipelines remain green.
+Finance temporarily reject requests, the script now **fails fast** so you know
+the prices were not refreshed—the chart must represent the latest available
+quotes. Only pass `--fallback-sample-data <dir>` if you deliberately want to
+reuse cached CSV files (for example, during a demo with spotty connectivity).
 
 ## GitHub Actions automation
 
@@ -53,12 +54,15 @@ weekday at 20:05 Singapore time (12:05 UTC). It executes
 python update_chart.py --write-sample-data sample_data
 ```
 
-which refreshes the Chart.js dashboard and replaces the CSV fixtures with the
-latest Yahoo Finance data. When the run detects changed files, it commits and
-pushes them back to the default branch using the repository’s built-in
-`GITHUB_TOKEN`. Ensure the workflow (or the repository-level setting) grants the
-token **write** access to contents—GitHub defaults to read-only tokens, which
-would cause `git push` to return HTTP 403 even though the commit step succeeds.
+which refreshes `chart-data.json`, the Chart.js wrapper, and the CSV fixtures
+with the latest Yahoo Finance data. When the run detects changed files, it
+commits and pushes them back to the default branch using the repository’s
+built-in `GITHUB_TOKEN`. The job intentionally omits a fallback directory so any
+download failure causes the workflow to error out instead of shipping stale
+data—rerun it once connectivity is restored. Ensure the workflow (or the
+repository-level setting) grants the token **write** access to contents—GitHub
+defaults to read-only tokens, which would cause `git push` to return HTTP 403
+even though the commit step succeeds.
 Trigger the workflow manually via the “Run workflow” button if you need an
 ad-hoc update outside the scheduled time window.
 

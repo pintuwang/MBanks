@@ -21,7 +21,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone, timedelta
 from pathlib import Path
-from typing import Dict, List, Mapping, Sequence, Set, Tuple
+from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -75,6 +75,12 @@ def parse_args() -> argparse.Namespace:
         help=f"HTML file to write (default: {OUTPUT_HTML}).",
     )
     parser.add_argument(
+        "--data-output",
+        type=Path,
+        default=OUTPUT_DATA,
+        help=f"JSON file to write chart data to (default: {OUTPUT_DATA}).",
+    )
+    parser.add_argument(
         "--write-sample-data",
         type=Path,
         help=(
@@ -87,7 +93,8 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help=(
             "Optional directory to read previously mirrored CSV files from if a "
-            "download fails. Defaults to --write-sample-data when that flag is set."
+            "download fails. Fallbacks are opt-in so automation jobs fail instead "
+            "of silently reusing stale data."
         ),
     )
     return parser.parse_args()
@@ -211,7 +218,11 @@ def compute_relative(prices: Mapping[str, "OrderedDict[date, float]"]) -> Mappin
     return relative
 
 
-def build_chart_json(relative_prices: Mapping[str, List[Tuple[date, float]]], ticker_to_name: Mapping[str, str]) -> str:
+def build_chart_payload(
+    relative_prices: Mapping[str, List[Tuple[date, float]]],
+    ticker_to_name: Mapping[str, str],
+    updated_at: datetime,
+) -> Mapping[str, Any]:
     datasets = []
     palette = [
         "#1f77b4",
@@ -237,15 +248,18 @@ def build_chart_json(relative_prices: Mapping[str, List[Tuple[date, float]]], ti
                 ],
             }
         )
+    updated_at_clean = updated_at.replace(microsecond=0)
+    updated_at_sgt = updated_at_clean.astimezone(SINGAPORE_TZ)
     payload = {
         "datasets": datasets,
         "yTitle": "Relative Price (1 Jul 2024 = 1.0)",
+        "updatedAt": updated_at_clean.isoformat(),
+        "updatedAtLabel": f"{updated_at_sgt.strftime('%d %b %Y %H:%M')} SGT",
     }
-    return json.dumps(payload, indent=2)
+    return payload
 
 
-def render_html(chart_json: str, updated_at: datetime) -> str:
-    timestamp = updated_at.strftime("%d %b %Y %H:%M %Z")
+def render_html(data_filename: str) -> str:
     return f"""<!DOCTYPE html>
 <html lang=\"en\">
 <head>
@@ -258,38 +272,130 @@ def render_html(chart_json: str, updated_at: datetime) -> str:
   <style>
     :root {{ font-family: 'Segoe UI', Tahoma, sans-serif; background:#f4f4f4; }}
     body {{ margin:0; padding:1rem; }}
-    h1 {{ text-align:center; }}
+    h1 {{ text-align:center; font-size:1.75rem; }}
     .container {{ max-width:1200px; margin:0 auto; background:#fff; padding:1rem 2rem; box-shadow:0 2px 8px rgba(0,0,0,0.1); }}
     .meta {{ text-align:center; color:#666; margin-bottom:1rem; }}
     canvas {{ width:100%; max-height:600px; }}
+    .slider-controls {{
+      margin-top:1.5rem;
+      display:flex;
+      flex-direction:column;
+      gap:0.35rem;
+    }}
+    .slider-controls label {{ font-weight:600; color:#333; }}
+    .slider-controls input[type=\"range\"] {{ width:100%; }}
   </style>
 </head>
 <body>
   <div class=\"container\">
-    <h1>{PAGE_TITLE}</h1>
-    <p class=\"meta\">Last updated: {timestamp}</p>
+    <h1>{PAGE_TITLE} – <span id=\"titleTimestamp\">Loading…</span></h1>
+    <p class=\"meta\">Last updated (SGT): <span id=\"updatedAt\">Loading latest data…</span></p>
     <canvas id=\"banksChart\"></canvas>
+    <div class=\"slider-controls\" id=\"sliderControls\" hidden>
+      <label for=\"windowSlider\">Visible window: <span id=\"sliderLabel\">Full range</span></label>
+      <input type=\"range\" id=\"windowSlider\" min=\"0\" value=\"0\" step=\"1\" />
+    </div>
   </div>
   <script>
-    const chartData = {chart_json};
-    const ctx = document.getElementById('banksChart').getContext('2d');
-    new Chart(ctx, {{
-      type: 'line',
-      data: {{ datasets: chartData.datasets }},
-      options: {{
-        responsive: true,
-        interaction: {{ mode: 'nearest', axis: 'x', intersect: false }},
-        stacked: false,
-        scales: {{
-          x: {{ type: 'time', time: {{ unit: 'month' }}, title: {{ display: true, text: 'Date' }} }},
-          y: {{ title: {{ display: true, text: chartData.yTitle }}, ticks: {{ callback: (value) => value.toFixed(2) }} }}
-        }},
-        plugins: {{ legend: {{ position: 'bottom' }} }}
+    async function initChart() {{
+      const meta = document.getElementById('updatedAt');
+      const titleTimestamp = document.getElementById('titleTimestamp');
+      const sliderControls = document.getElementById('sliderControls');
+      const slider = document.getElementById('windowSlider');
+      const sliderLabel = document.getElementById('sliderLabel');
+      try {{
+        const response = await fetch('{data_filename}', {{ cache: 'no-cache' }});
+        if (!response.ok) {{
+          throw new Error(`Failed to fetch chart data: ${{response.status}}`);
+        }}
+        const chartData = await response.json();
+        const updatedLabel = chartData.updatedAtLabel || chartData.updatedAt || 'Unknown';
+        meta.textContent = updatedLabel;
+        titleTimestamp.textContent = updatedLabel;
+        const ctx = document.getElementById('banksChart').getContext('2d');
+        const chart = new Chart(ctx, {{
+          type: 'line',
+          data: {{ datasets: chartData.datasets }},
+          options: {{
+            responsive: true,
+            interaction: {{ mode: 'nearest', axis: 'x', intersect: false }},
+            stacked: false,
+            scales: {{
+              x: {{ type: 'time', time: {{ unit: 'month' }}, title: {{ display: true, text: 'Date' }} }},
+              y: {{
+                title: {{ display: true, text: chartData.yTitle || 'Relative Price' }},
+                ticks: {{ callback: (value) => (typeof value === 'number' ? value.toFixed(2) : value) }}
+              }}
+            }},
+            plugins: {{ legend: {{ position: 'bottom' }} }}
+          }}
+        }});
+
+        configureSlider(chart, chartData, sliderControls, slider, sliderLabel);
+      }} catch (error) {{
+        meta.textContent = 'Failed to load data';
+        titleTimestamp.textContent = 'Unavailable';
+        console.error(error);
       }}
-    }});
+    }}
+
+    function configureSlider(chart, chartData, controls, slider, label) {{
+      const DEFAULT_WINDOW_POINTS = 130;
+      const dates = Array.from(
+        new Set(
+          chartData.datasets.flatMap((dataset) =>
+            (dataset.data || []).map((point) => point.x)
+          )
+        )
+      ).sort();
+      if (dates.length === 0) {{
+        controls.hidden = true;
+        return;
+      }}
+      const windowSize = Math.min(DEFAULT_WINDOW_POINTS, dates.length);
+      const maxStartIndex = Math.max(dates.length - windowSize, 0);
+      slider.max = String(maxStartIndex);
+      slider.value = String(maxStartIndex);
+
+      if (dates.length <= windowSize) {{
+        controls.hidden = true;
+        chart.options.scales.x.min = undefined;
+        chart.options.scales.x.max = undefined;
+        chart.update('none');
+        return;
+      }}
+
+      controls.hidden = false;
+
+      const formatRangeLabel = (startISO, endISO) => {{
+        const start = luxon.DateTime.fromISO(startISO).toFormat('dd LLL yyyy');
+        const end = luxon.DateTime.fromISO(endISO).toFormat('dd LLL yyyy');
+        return `${{start}} → ${{end}}`;
+      }};
+
+      const applyWindow = (startIndex) => {{
+        const startISO = dates[startIndex];
+        const endISO = dates[Math.min(startIndex + windowSize - 1, dates.length - 1)];
+        chart.options.scales.x.min = startISO;
+        chart.options.scales.x.max = endISO;
+        chart.update('none');
+        label.textContent = formatRangeLabel(startISO, endISO);
+      }};
+
+      slider.addEventListener('input', (event) => {{
+        const startIndex = Number(event.target.value);
+        applyWindow(startIndex);
+      }});
+
+      applyWindow(maxStartIndex);
+    }}
+    initChart();
   </script>
 </body>
 </html>"""
+
+def save_json(content: Mapping[str, Any], path: Path) -> None:
+    path.write_text(json.dumps(content, indent=2), encoding="utf-8")
 
 
 def save_html(content: str, path: Path) -> None:
@@ -303,14 +409,21 @@ def main() -> None:
     tickers = [bank.ticker for bank in BANKS]
     ticker_to_name = {bank.ticker: bank.name for bank in BANKS}
 
-    fallback_dir = args.fallback_sample_data or args.write_sample_data
-    prices = load_prices(tickers, args.sample_data, args.write_sample_data, fallback_dir)
+    prices = load_prices(
+        tickers,
+        args.sample_data,
+        args.write_sample_data,
+        args.fallback_sample_data,
+    )
     relative = compute_relative(prices)
-    chart_json = build_chart_json(relative, ticker_to_name)
-    html = render_html(chart_json, datetime.now(timezone.utc))
+    updated_at = datetime.now(timezone.utc)
+    chart_payload = build_chart_payload(relative, ticker_to_name, updated_at)
+    save_json(chart_payload, args.data_output)
+    html = render_html(args.data_output.name)
     save_html(html, args.output)
 
-    print(f"Chart updated -> {args.output}")
+    print(f"Chart data -> {args.data_output}")
+    print(f"HTML shell -> {args.output}")
 
 
 if __name__ == "__main__":
