@@ -16,8 +16,19 @@ The banks are:
 ## Automated chart
 
 Use `update_chart.py` (standard-library only) to download daily adjusted close
-prices from Yahoo Finance, normalize them to 1 July 2024, and export an
-interactive Chart.js visualization to `top_10_malaysian_banks.html`. The script is
+prices from Yahoo Finance, normalize them to 1 July 2024, and export two
+artifacts:
+
+1. `chart-data.json` – structured data (datasets, metadata, timestamp)
+2. `index.html` – a lightweight Chart.js shell that fetches the JSON at runtime
+
+The HTML wrapper displays the refresh timestamp directly inside the chart title
+and “Last updated (SGT)” caption, so viewers always see Singapore-local time. If
+the data series grows long, a range slider below the canvas lets you focus on a
+six-month window without the lines becoming overly compressed; drag it left or
+right to pan through the full history.
+
+The script is
 intended to run every weekday at 8 PM Singapore time and skips weekends
 automatically. For cron jobs:
 
@@ -30,19 +41,20 @@ Use the optional `--force` flag if you need to regenerate the file outside the
 scheduled window for testing. When running in an offline environment, pass
 `--sample-data sample_data/` to use the bundled synthetic CSV files instead of
 downloading live quotes. The sample set now mirrors every Bursa Malaysia trading
-day from 1 July 2024 through 20 May 2025 (232 sessions), so the generated
+day from 1 July 2024 through 14 Nov 2025 (300+ sessions), so the generated
 relative-price chart preserves the more-than-200 data points per bank that the
-production job accumulates.
+production job accumulates. The HTML wrapper no longer embeds the data directly,
+so once `chart-data.json` is refreshed, the hosted chart automatically reflects
+the latest run without having to merge large inline arrays.
 
 If you run the script with live network access, add
 `--write-sample-data sample_data/` so the freshly downloaded Yahoo Finance CSV
 files are mirrored back into the repository. This keeps the offline fixtures in
 sync with the latest market sessions without any extra scripting. Should Yahoo
-Finance temporarily reject requests, the script now falls back to any cached CSV
-files in that mirror directory (or in a separate location passed via
-`--fallback-sample-data sample_data/`). A warning is printed so you know the
-prices were not refreshed, but the HTML chart is still regenerated so scheduled
-pipelines remain green.
+Finance temporarily reject requests, the script now **fails fast** so you know
+the prices were not refreshed—the chart must represent the latest available
+quotes. Only pass `--fallback-sample-data <dir>` if you deliberately want to
+reuse cached CSV files (for example, during a demo with spotty connectivity).
 
 ## GitHub Actions automation
 
@@ -53,12 +65,15 @@ weekday at 20:05 Singapore time (12:05 UTC). It executes
 python update_chart.py --write-sample-data sample_data
 ```
 
-which refreshes the Chart.js dashboard and replaces the CSV fixtures with the
-latest Yahoo Finance data. When the run detects changed files, it commits and
-pushes them back to the default branch using the repository’s built-in
-`GITHUB_TOKEN`. Ensure the workflow (or the repository-level setting) grants the
-token **write** access to contents—GitHub defaults to read-only tokens, which
-would cause `git push` to return HTTP 403 even though the commit step succeeds.
+which refreshes `chart-data.json`, the Chart.js wrapper, and the CSV fixtures
+with the latest Yahoo Finance data. When the run detects changed files, it
+commits and pushes them back to the default branch using the repository’s
+built-in `GITHUB_TOKEN`. The job intentionally omits a fallback directory so any
+download failure causes the workflow to error out instead of shipping stale
+data—rerun it once connectivity is restored. Ensure the workflow (or the
+repository-level setting) grants the token **write** access to contents—GitHub
+defaults to read-only tokens, which would cause `git push` to return HTTP 403
+even though the commit step succeeds.
 Trigger the workflow manually via the “Run workflow” button if you need an
 ad-hoc update outside the scheduled time window.
 
@@ -72,11 +87,11 @@ ad-hoc update outside the scheduled time window.
    git pull origin main
    ```
 2. Generate or refresh the chart/data as usual (for example,
-   `python update_chart.py --write-sample-data sample_data`). This updates both
-   `top_10_malaysian_banks.html` and the ten CSVs under `sample_data/` locally.
+   `python update_chart.py --write-sample-data sample_data`). This updates the
+   JSON data file, `index.html`, and the ten CSVs under `sample_data/` locally.
 3. Stage every modified file, including the CSV fixtures:
    ```bash
-   git add update_chart.py top_10_malaysian_banks.html sample_data/*.csv
+   git add update_chart.py index.html chart-data.json sample_data/*.csv
    ```
    You can also stage everything at once with `git add -A` if that is easier.
 4. Commit and push the changes back to GitHub so the files live in the cloud:
@@ -102,7 +117,7 @@ plus the Python/HTML assets), you have two easy options:
    cd MBanks
    ```
    Git creates a local working copy that already contains
-   `sample_data/*.csv`, `update_chart.py`, `top_10_malaysian_banks.html`, and
+   `sample_data/*.csv`, `update_chart.py`, `index.html`, and
    `Readme.txt`, so you do not have to download 14 files individually.
 2. **Download a ZIP from GitHub** – ideal if you only need a one-time copy.
    Open the repository page in your browser, click the green **Code** button,
