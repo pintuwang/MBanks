@@ -17,7 +17,7 @@ The banks are:
 
 Use `update_chart.py` (standard-library only) to download daily adjusted close
 prices from Yahoo Finance, normalize them to 1 July 2024, and export an
-interactive Chart.js visualization to `top_10_malaysian_banks.html`. The script is
+interactive Chart.js visualization to `index.html`. The script is
 intended to run every weekday at 8 PM Singapore time and skips weekends
 automatically. For cron jobs:
 
@@ -73,10 +73,10 @@ ad-hoc update outside the scheduled time window.
    ```
 2. Generate or refresh the chart/data as usual (for example,
    `python update_chart.py --write-sample-data sample_data`). This updates both
-   `top_10_malaysian_banks.html` and the ten CSVs under `sample_data/` locally.
+   `index.html` and the ten CSVs under `sample_data/` locally.
 3. Stage every modified file, including the CSV fixtures:
    ```bash
-   git add update_chart.py top_10_malaysian_banks.html sample_data/*.csv
+   git add update_chart.py index.html sample_data/*.csv
    ```
    You can also stage everything at once with `git add -A` if that is easier.
 4. Commit and push the changes back to GitHub so the files live in the cloud:
@@ -102,7 +102,7 @@ plus the Python/HTML assets), you have two easy options:
    cd MBanks
    ```
    Git creates a local working copy that already contains
-   `sample_data/*.csv`, `update_chart.py`, `top_10_malaysian_banks.html`, and
+   `sample_data/*.csv`, `update_chart.py`, `index.html`, and
    `Readme.txt`, so you do not have to download 14 files individually.
 2. **Download a ZIP from GitHub** – ideal if you only need a one-time copy.
    Open the repository page in your browser, click the green **Code** button,

@@ -34,6 +34,6 @@ jobs:
           fi
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-          git add sample_data top_10_malaysian_banks.html
+          git add sample_data index.html
           git commit -m "Update sample data and chart"
           git push
