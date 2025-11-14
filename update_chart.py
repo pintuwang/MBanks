@@ -21,7 +21,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone, timedelta
 from pathlib import Path
-from typing import Dict, List, Mapping, Sequence, Tuple
+from typing import Dict, List, Mapping, Sequence, Set, Tuple
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -80,6 +80,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Optional directory to mirror freshly downloaded Yahoo Finance CSV files. "
             "Only applies when network data is used."
+        ),
+    )
+    parser.add_argument(
+        "--fallback-sample-data",
+        type=Path,
+        help=(
+            "Optional directory to read previously mirrored CSV files from if a "
+            "download fails. Defaults to --write-sample-data when that flag is set."
         ),
     )
     return parser.parse_args()
@@ -143,10 +151,17 @@ def load_prices(
     tickers: Sequence[str],
     sample_dir: Path | None,
     mirror_dir: Path | None,
+    fallback_dir: Path | None,
 ) -> Mapping[str, "OrderedDict[date, float]"]:
     prices: Dict[str, "OrderedDict[date, float]"] = {}
     if mirror_dir and not sample_dir:
         mirror_dir.mkdir(parents=True, exist_ok=True)
+    fallback_candidates: List[Path] = []
+    seen_dirs: Set[Path] = set()
+    for directory in (fallback_dir, mirror_dir):
+        if directory and directory not in seen_dirs:
+            fallback_candidates.append(directory)
+            seen_dirs.add(directory)
     for ticker in tickers:
         if sample_dir:
             csv_path = sample_dir / f"{ticker}.csv"
@@ -157,7 +172,21 @@ def load_prices(
             try:
                 text = fetch_remote_csv(ticker)
             except URLError as exc:
-                raise RuntimeError(f"Failed to download data for {ticker}: {exc}") from exc
+                text = None
+                for directory in fallback_candidates:
+                    csv_path = directory / f"{ticker}.csv"
+                    if csv_path.exists():
+                        print(
+                            f"Warning: download failed for {ticker} ({exc}). "
+                            f"Falling back to cached data at {csv_path}",
+                            file=sys.stderr,
+                        )
+                        text = csv_path.read_text(encoding="utf-8")
+                        break
+                if text is None:
+                    raise RuntimeError(
+                        f"Failed to download data for {ticker}: {exc}. No fallback file present."
+                    ) from exc
             if mirror_dir:
                 (mirror_dir / f"{ticker}.csv").write_text(text, encoding="utf-8")
         prices[ticker] = parse_csv_rows(text)
@@ -274,7 +303,8 @@ def main() -> None:
     tickers = [bank.ticker for bank in BANKS]
     ticker_to_name = {bank.ticker: bank.name for bank in BANKS}
 
-    prices = load_prices(tickers, args.sample_data, args.write_sample_data)
+    fallback_dir = args.fallback_sample_data or args.write_sample_data
+    prices = load_prices(tickers, args.sample_data, args.write_sample_data, fallback_dir)
     relative = compute_relative(prices)
     chart_json = build_chart_json(relative, ticker_to_name)
     html = render_html(chart_json, datetime.now(timezone.utc))

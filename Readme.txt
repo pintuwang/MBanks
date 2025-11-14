@@ -37,7 +37,12 @@ production job accumulates.
 If you run the script with live network access, add
 `--write-sample-data sample_data/` so the freshly downloaded Yahoo Finance CSV
 files are mirrored back into the repository. This keeps the offline fixtures in
-sync with the latest market sessions without any extra scripting.
+sync with the latest market sessions without any extra scripting. Should Yahoo
+Finance temporarily reject requests, the script now falls back to any cached CSV
+files in that mirror directory (or in a separate location passed via
+`--fallback-sample-data sample_data/`). A warning is printed so you know the
+prices were not refreshed, but the HTML chart is still regenerated so scheduled
+pipelines remain green.
 
 ## GitHub Actions automation
 
