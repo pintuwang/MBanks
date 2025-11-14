@@ -16,13 +16,8 @@ The banks are:
 ## Automated chart
 
 Use `update_chart.py` (standard-library only) to download daily adjusted close
-prices from Yahoo Finance, normalize them to 1 July 2024, and export two
-artifacts:
-
-1. `chart-data.json` – structured data (datasets, metadata, timestamp)
-2. `index.html` – a lightweight Chart.js shell that fetches the JSON at runtime
-
-The script is
+prices from Yahoo Finance, normalize them to 1 July 2024, and export an
+interactive Chart.js visualization to `index.html`. The script is
 intended to run every weekday at 8 PM Singapore time and skips weekends
 automatically. For cron jobs:
 
@@ -81,11 +76,11 @@ ad-hoc update outside the scheduled time window.
    git pull origin main
    ```
 2. Generate or refresh the chart/data as usual (for example,
-   `python update_chart.py --write-sample-data sample_data`). This updates the
-   JSON data file, `index.html`, and the ten CSVs under `sample_data/` locally.
+   `python update_chart.py --write-sample-data sample_data`). This updates both
+   `index.html` and the ten CSVs under `sample_data/` locally.
 3. Stage every modified file, including the CSV fixtures:
    ```bash
-   git add update_chart.py index.html chart-data.json sample_data/*.csv
+   git add update_chart.py index.html sample_data/*.csv
    ```
    You can also stage everything at once with `git add -A` if that is easier.
 4. Commit and push the changes back to GitHub so the files live in the cloud:
