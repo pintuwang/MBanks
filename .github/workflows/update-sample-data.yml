@@ -1,0 +1,33 @@
+name: Refresh KLSE chart
+
+on:
+  schedule:
+    # 20:05 Singapore time Monday-Friday
+    - cron: '5 12 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Refresh sample data and chart
+        run: |
+          python update_chart.py --write-sample-data sample_data
+      - name: Commit and push if changed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add sample_data top_10_malaysian_banks.html
+          git commit -m "Update sample data and chart"
+          git push
