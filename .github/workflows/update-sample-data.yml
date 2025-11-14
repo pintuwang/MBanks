@@ -6,6 +6,9 @@ on:
     - cron: '5 12 * * 1-5'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -17,6 +20,9 @@ jobs:
           python-version: '3.x'
       - name: Refresh sample data and chart
         run: |
+          # If Yahoo Finance is unavailable the script automatically reuses the
+          # cached CSVs under sample_data/ while emitting a warning. Fresh data
+          # overwrites the cache on successful runs.
           python update_chart.py --write-sample-data sample_data
       - name: Commit and push if changed
         env:

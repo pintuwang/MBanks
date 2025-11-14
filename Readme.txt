@@ -37,7 +37,12 @@ production job accumulates.
 If you run the script with live network access, add
 `--write-sample-data sample_data/` so the freshly downloaded Yahoo Finance CSV
 files are mirrored back into the repository. This keeps the offline fixtures in
-sync with the latest market sessions without any extra scripting.
+sync with the latest market sessions without any extra scripting. Should Yahoo
+Finance temporarily reject requests, the script now falls back to any cached CSV
+files in that mirror directory (or in a separate location passed via
+`--fallback-sample-data sample_data/`). A warning is printed so you know the
+prices were not refreshed, but the HTML chart is still regenerated so scheduled
+pipelines remain green.
 
 ## GitHub Actions automation
 
@@ -51,8 +56,11 @@ python update_chart.py --write-sample-data sample_data
 which refreshes the Chart.js dashboard and replaces the CSV fixtures with the
 latest Yahoo Finance data. When the run detects changed files, it commits and
 pushes them back to the default branch using the repository’s built-in
-`GITHUB_TOKEN`. Trigger the workflow manually via the “Run workflow” button if
-you need an ad-hoc update outside the scheduled time window.
+`GITHUB_TOKEN`. Ensure the workflow (or the repository-level setting) grants the
+token **write** access to contents—GitHub defaults to read-only tokens, which
+would cause `git push` to return HTTP 403 even though the commit step succeeds.
+Trigger the workflow manually via the “Run workflow” button if you need an
+ad-hoc update outside the scheduled time window.
 
 
 ## Committing everything (including `sample_data/`) to GitHub
