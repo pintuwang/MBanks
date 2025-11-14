@@ -55,6 +55,7 @@ BANKS: Sequence[Bank] = (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    default_html = globals().get("OUTPUT_HTML", Path("index.html"))
     parser.add_argument(
         "--force",
         action="store_true",
@@ -71,8 +72,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=OUTPUT_HTML,
-        help=f"HTML file to write (default: {OUTPUT_HTML}).",
+        default=default_html,
+        help=f"HTML file to write (default: {default_html}).",
+    )
+    default_data = globals().get("OUTPUT_DATA")
+    if default_data is None:
+        default_data = Path("chart-data.json")
+    parser.add_argument(
+        "--data-output",
+        type=Path,
+        default=default_data,
+        help=f"JSON file to write chart data to (default: {default_data}).",
     )
     parser.add_argument(
         "--data-output",
