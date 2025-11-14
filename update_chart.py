@@ -31,7 +31,6 @@ BASE_DATE = date(2024, 7, 1)
 SINGAPORE_TZ = timezone(timedelta(hours=8))
 PAGE_TITLE = "Top 10 Malaysian Banks Performance with base 1 Jul 2024"
 OUTPUT_HTML = Path("index.html")
-OUTPUT_DATA = Path("chart-data.json")
 
 
 @dataclass(frozen=True)
