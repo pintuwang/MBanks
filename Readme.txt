@@ -66,6 +66,25 @@ even though the commit step succeeds.
 Trigger the workflow manually via the “Run workflow” button if you need an
 ad-hoc update outside the scheduled time window.
 
+### Making the HTML chart viewable on GitHub
+
+The repository only commits the generated `top_10_malaysian_banks.html` file;
+GitHub does not automatically host it unless you turn on **GitHub Pages**. If
+you want a browser-friendly URL (for example,
+`https://<username>.github.io/MBanks/top_10_malaysian_banks.html`), open
+**Settings → Pages** and:
+
+1. Under **Build and deployment**, choose **Deploy from a branch**.
+2. Select the `main` branch and the `/ (root)` folder, then click **Save**.
+3. Wait for the green “Your site is published” banner; GitHub may take a few
+   minutes to provision the page the first time.
+
+After Pages is enabled, every successful workflow run that regenerates the HTML
+automatically updates the publicly viewable chart because the file already lives
+on `main`. Without Pages you can still download the artifact (clone or use the
+“Download ZIP” option) and open the HTML locally, but you will not get a hosted
+URL from GitHub.
+
 
 ## Committing everything (including `sample_data/`) to GitHub
 
